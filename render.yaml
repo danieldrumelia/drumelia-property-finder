@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: drumelia-property-finder
+    runtime: docker
+    plan: standard
+    healthCheckPath: /login
+    envVars:
+      - key: REPORT_DIR
+        value: reports
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SCRAPER_HEADLESS
+        value: "true"
+      - key: SCRAPER_TIMEOUT_MS
+        value: "60000"
+      - key: SCRAPER_MAX_PAGES
+        value: "0"
+      - key: SCRAPER_RETRIES
+        value: "4"
+      - key: EMAIL_ENABLED
+        value: "true"
+      - key: EMAIL_SMTP_HOST
+        value: smtp.office365.com
+      - key: EMAIL_SMTP_PORT
+        value: "587"
+      - key: EMAIL_USERNAME
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_TO
+        sync: false
+      - key: EMAIL_USE_TLS
+        value: "true"
+      - key: WEB_AUTH_ENABLED
+        value: "true"
+      - key: WEB_USERS
+        sync: false
+      - key: CUSTOM_REPORT_MAX_CONCURRENT_JOBS
+        value: "2"
