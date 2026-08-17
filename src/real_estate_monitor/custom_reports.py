@@ -15,6 +15,7 @@ from real_estate_monitor.scrapers import available_sites, build_scraper
 
 REPORT_TIMEZONE = timezone(timedelta(hours=2))
 DEFAULT_SITE_TIMEOUT_SECONDS = 900
+PRICE_NUMBER_PATTERN = r"\d+(?:[.,]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?"
 
 SITE_NAMES = {
     "drumelia": "Drumelia",
@@ -184,6 +185,7 @@ STOP_WORDS = {
     "beds",
     "between",
     "below",
+    "budget",
     "for",
     "from",
     "in",
@@ -191,6 +193,7 @@ STOP_WORDS = {
     "less",
     "million",
     "millions",
+    "minimum",
     "of",
     "over",
     "properties",
@@ -243,6 +246,7 @@ class CustomReportResult:
 def parse_custom_report_request(query: str, recipient: str) -> CustomReportRequest:
     cleaned_query = " ".join(query.strip().split())
     normalized = _normalize(_separate_number_words(cleaned_query))
+    keyword_query = _strip_price_phrases(normalized)
     property_type = _parse_property_type(normalized)
     locations = tuple(location for location, terms in LOCATION_TERMS.items() if any(term in normalized for term in terms))
     features = tuple(feature for feature, terms in FEATURE_TERMS.items() if any(term in normalized for term in terms))
@@ -253,7 +257,7 @@ def parse_custom_report_request(query: str, recipient: str) -> CustomReportReque
     grouped_terms.update(term for location in locations for term in LOCATION_TERMS[location])
     words = tuple(
         word
-        for word in re.findall(r"[a-z0-9]+", normalized)
+        for word in re.findall(r"[a-z0-9]+", keyword_query)
         if len(word) > 2 and word not in STOP_WORDS and not any(word in term for term in grouped_terms)
     )
     return CustomReportRequest(
@@ -462,13 +466,16 @@ def _listing_row(listing: ListingSnapshot) -> str:
 
 def _parse_max_price(query: str) -> int | None:
     range_match = re.search(
-        r"(?:between|from)\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)\s*(m|million|millions|k)?\s*(?:and|to|-)\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)\s*(m|million|millions|k)?",
+        rf"(?:between|from)\s*(?:€|eur)?\s*({PRICE_NUMBER_PATTERN})\s*(?:€|eur)?\s*(millions|million|m|k)?\s*(?:and|to|-)\s*(?:€|eur)?\s*({PRICE_NUMBER_PATTERN})\s*(?:€|eur)?\s*(millions|million|m|k)?",
         query,
     )
     if range_match:
         upper_suffix = range_match.group(4) or range_match.group(2) or ""
         return _price_value(range_match.group(3), upper_suffix)
-    match = re.search(r"(?:under|below|less than|up to|max(?:imum)?)\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)\s*(m|million|millions|k)?", query)
+    match = re.search(
+        rf"(?:under|below|less than|up to|max(?:imum)?)\s*(?:€|eur)?\s*({PRICE_NUMBER_PATTERN})\s*(?:€|eur)?\s*(millions|million|m|k)?",
+        query,
+    )
     if not match:
         return None
     return _price_value(match.group(1), match.group(2) or "")
@@ -476,13 +483,16 @@ def _parse_max_price(query: str) -> int | None:
 
 def _parse_min_price(query: str) -> int | None:
     range_match = re.search(
-        r"(?:between|from)\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)\s*(m|million|millions|k)?\s*(?:and|to|-)\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)\s*(m|million|millions|k)?",
+        rf"(?:between|from)\s*(?:€|eur)?\s*({PRICE_NUMBER_PATTERN})\s*(?:€|eur)?\s*(millions|million|m|k)?\s*(?:and|to|-)\s*(?:€|eur)?\s*({PRICE_NUMBER_PATTERN})\s*(?:€|eur)?\s*(millions|million|m|k)?",
         query,
     )
     if range_match:
         lower_suffix = range_match.group(2) or range_match.group(4) or ""
         return _price_value(range_match.group(1), lower_suffix)
-    match = re.search(r"(?:over|above|more than|from|min(?:imum)?)\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)\s*(m|million|millions|k)?", query)
+    match = re.search(
+        rf"(?:over|above|more than|from|min(?:imum)?|budget min(?:imum)?)\s*(?:€|eur)?\s*({PRICE_NUMBER_PATTERN})\s*(?:€|eur)?\s*(millions|million|m|k)?",
+        query,
+    )
     if not match:
         return None
     return _price_value(match.group(1), match.group(2) or "")
@@ -584,7 +594,7 @@ def _format_number(value: float) -> str:
 
 
 def _price_value(raw_number: str, suffix: str) -> int:
-    number = float(raw_number.replace(",", "."))
+    number = _price_number(raw_number, suffix)
     if suffix in {"m", "million", "millions"}:
         return int(number * 1_000_000)
     if suffix == "k":
@@ -592,6 +602,26 @@ def _price_value(raw_number: str, suffix: str) -> int:
     if number < 1000:
         return int(number * 1_000_000)
     return int(number)
+
+
+def _price_number(raw_number: str, suffix: str) -> float:
+    if _looks_like_grouped_thousands(raw_number):
+        return float(re.sub(r"[.,]", "", raw_number))
+    normalized = raw_number.replace(",", ".")
+    return float(normalized)
+
+
+def _looks_like_grouped_thousands(raw_number: str) -> bool:
+    return bool(re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", raw_number))
+
+
+def _strip_price_phrases(query: str) -> str:
+    price = rf"(?:€|eur)?\s*{PRICE_NUMBER_PATTERN}\s*(?:€|eur)?\s*(?:millions|million|m|k)?"
+    range_pattern = rf"(?:between|from)\s*{price}\s*(?:and|to|-)\s*{price}"
+    comparator_pattern = rf"(?:budget\s*)?(?:under|below|less than|up to|max(?:imum)?|over|above|more than|from|min(?:imum)?)\s*{price}"
+    query = re.sub(range_pattern, " ", query)
+    query = re.sub(comparator_pattern, " ", query)
+    return query
 
 
 def _listing_text(listing: ListingSnapshot) -> str:

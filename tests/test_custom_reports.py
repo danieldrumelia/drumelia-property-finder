@@ -95,6 +95,47 @@ def test_parse_custom_report_request_price_range_and_bedrooms() -> None:
     assert request.required_terms == ()
 
 
+def test_parse_custom_report_request_accepts_dotted_euro_minimum_budget() -> None:
+    request = parse_custom_report_request(
+        "Villa on the golden mile, budget minimum 5.000.000€",
+        "agent@drumelia.com",
+    )
+
+    assert request.min_price == 5_000_000
+    assert request.max_price is None
+    assert request.property_type == "villa"
+    assert request.locations == ("golden_mile",)
+    assert request.required_terms == ()
+
+
+def test_parse_custom_report_request_accepts_comma_grouped_euro_budget() -> None:
+    request = parse_custom_report_request(
+        "villa in Golden Mile over €5,000,000",
+        "agent@drumelia.com",
+    )
+
+    assert request.min_price == 5_000_000
+    assert request.property_type == "villa"
+    assert request.locations == ("golden_mile",)
+    assert request.required_terms == ()
+
+
+def test_dotted_euro_budget_matches_golden_mile_villa() -> None:
+    request = parse_custom_report_request(
+        "Villa on the golden mile, budget minimum 5.000.000€",
+        "agent@drumelia.com",
+    )
+    listing = ListingSnapshot(
+        site="drumelia",
+        external_id="D9999",
+        url="https://www.example.com/properties/marbella-golden-mile/villa/D9999",
+        title="Elegant villa in Marbella Golden Mile",
+        price=5_500_000,
+    )
+
+    assert listing_matches_request(listing, request)
+
+
 def test_price_range_and_bedroom_request_matches_villa() -> None:
     request = parse_custom_report_request(
         "villas between 4 and 5 million with at least 3 bedrooms",
