@@ -51,6 +51,36 @@ PROPERTY_TYPE_LABELS = {
 }
 
 FEATURE_TERMS = {
+    "renovation_needed": (
+        "needs renovation",
+        "need of renovation",
+        "in need of renovation",
+        "renovation needed",
+        "renovation project",
+        "renovation opportunity",
+        "to renovate",
+        "to be renovated",
+        "requires renovation",
+        "requires refurbishment",
+        "refurbishment project",
+        "reform project",
+        "to reform",
+        "needs reform",
+        "in need of reform",
+        "needs updating",
+        "to update",
+        "requires updating",
+        "potential to renovate",
+        "renovation potential",
+        "investment opportunity",
+        "partial renovation needed",
+        "reforma",
+        "para reformar",
+        "necesita reforma",
+        "necesita renovacion",
+        "necesita renovación",
+        "a reformar",
+    ),
     "renovated": (
         "renovated",
         "refurbished",
@@ -179,6 +209,7 @@ STOP_WORDS = {
     "and",
     "are",
     "at",
+    "any",
     "bed",
     "bedroom",
     "bedrooms",
@@ -191,6 +222,9 @@ STOP_WORDS = {
     "in",
     "least",
     "less",
+    "need",
+    "needed",
+    "needs",
     "million",
     "millions",
     "minimum",
@@ -249,7 +283,12 @@ def parse_custom_report_request(query: str, recipient: str) -> CustomReportReque
     keyword_query = _strip_price_phrases(normalized)
     property_type = _parse_property_type(normalized)
     locations = tuple(location for location, terms in LOCATION_TERMS.items() if any(term in normalized for term in terms))
-    features = tuple(feature for feature, terms in FEATURE_TERMS.items() if any(term in normalized for term in terms))
+    features = tuple(
+        feature
+        for feature, terms in FEATURE_TERMS.items()
+        if any(term in normalized for term in terms)
+        or (feature == "renovation_needed" and _has_renovation_needed_intent(normalized))
+    )
     required_groups = features + ((property_type,) if property_type else ())
     required_phrases = _required_phrases(normalized, property_type)
     grouped_terms = {term for group in required_groups for term in TERM_GROUPS[group]}
@@ -530,6 +569,21 @@ def _required_phrases(query: str, property_type: str | None) -> tuple[str, ...]:
     if property_type == "penthouse":
         return ("penthouse",)
     return ()
+
+
+def _has_renovation_needed_intent(query: str) -> bool:
+    return bool(
+        re.search(
+            r"(?:need(?:s|ed)?|require(?:s|d)?|for|to|potential|opportunity|project).{0,28}"
+            r"(?:renovat|refurbish|reform|updat)",
+            query,
+        )
+        or re.search(
+            r"(?:renovat|refurbish|reform|updat).{0,28}"
+            r"(?:need(?:s|ed)?|require(?:s|d)?|potential|opportunity|project)",
+            query,
+        )
+    )
 
 
 def _matches_property_type(text: str, property_type: str) -> bool:

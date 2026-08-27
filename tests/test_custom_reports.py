@@ -120,6 +120,50 @@ def test_parse_custom_report_request_accepts_comma_grouped_euro_budget() -> None
     assert request.required_terms == ()
 
 
+def test_parse_custom_report_request_under_3_million_needs_renovation() -> None:
+    request = parse_custom_report_request(
+        "Any property under 3 million in need of renovation",
+        "agent@drumelia.com",
+    )
+
+    assert request.max_price == 3_000_000
+    assert request.property_type is None
+    assert request.features == ("renovation_needed",)
+    assert request.required_terms == ()
+
+
+def test_renovation_needed_request_matches_reform_opportunity() -> None:
+    request = parse_custom_report_request(
+        "Any property under 3 million in need of renovation",
+        "agent@drumelia.com",
+    )
+    listing = ListingSnapshot(
+        site="drumelia",
+        external_id="D1111",
+        url="https://www.example.com/properties/apartment/D1111",
+        title="Apartment with great potential to reform near the beach",
+        price=1_250_000,
+    )
+
+    assert listing_matches_request(listing, request)
+
+
+def test_renovation_needed_request_does_not_match_finished_renovated_listing() -> None:
+    request = parse_custom_report_request(
+        "Any property under 3 million in need of renovation",
+        "agent@drumelia.com",
+    )
+    listing = ListingSnapshot(
+        site="drumelia",
+        external_id="D1112",
+        url="https://www.example.com/properties/apartment/D1112",
+        title="Fully renovated apartment ready to move in",
+        price=1_250_000,
+    )
+
+    assert not listing_matches_request(listing, request)
+
+
 def test_dotted_euro_budget_matches_golden_mile_villa() -> None:
     request = parse_custom_report_request(
         "Villa on the golden mile, budget minimum 5.000.000€",
