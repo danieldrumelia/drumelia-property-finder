@@ -51,6 +51,11 @@ PROPERTY_TYPE_LABELS = {
 }
 
 FEATURE_TERMS = {
+    "sold": (
+        "sold",
+        "vendido",
+        "vendida",
+    ),
     "renovation_needed": (
         "needs renovation",
         "need of renovation",
@@ -173,6 +178,9 @@ LOCATION_TERMS = {
     "sierra_blanca": ("sierra blanca",),
     "la_quinta": ("la quinta",),
     "nagueles": ("nagueles", "nagüeles"),
+    "los_arqueros": ("los arqueros",),
+    "los_almendros": ("los almendros",),
+    "puerto_del_almendro": ("puerto del almendro", "puerto-del-almendro"),
 }
 
 LOCATION_LABELS = {
@@ -189,6 +197,9 @@ LOCATION_LABELS = {
     "sierra_blanca": "Sierra Blanca",
     "la_quinta": "La Quinta",
     "nagueles": "Nagueles",
+    "los_arqueros": "Los Arqueros",
+    "los_almendros": "Los Almendros",
+    "puerto_del_almendro": "Puerto del Almendro",
 }
 
 FRONTLINE_BEACH_TERMS = (
@@ -232,11 +243,15 @@ STOP_WORDS = {
     "over",
     "properties",
     "property",
+    "sale",
     "than",
     "the",
     "to",
     "under",
     "with",
+    "last",
+    "year",
+    "years",
 }
 
 
@@ -376,13 +391,14 @@ def listing_matches_request(listing: ListingSnapshot, request: CustomReportReque
     text = _listing_text(listing)
     if request.property_type and not _matches_property_type(text, request.property_type):
         return False
-    for location in request.locations:
-        if not any(term in text for term in LOCATION_TERMS[location]):
-            return False
+    if request.locations and not _matches_requested_locations(text, request.locations):
+        return False
     if request.require_frontline_beach and not _matches_frontline_beach(text):
         return False
     for feature in request.features:
         if feature == "beachfront" and request.require_frontline_beach:
+            continue
+        if feature == "sold" and _matches_sold_listing(listing, text):
             continue
         if not any(term in text for term in FEATURE_TERMS[feature]):
             return False
@@ -584,6 +600,18 @@ def _has_renovation_needed_intent(query: str) -> bool:
             query,
         )
     )
+
+
+def _matches_requested_locations(text: str, locations: tuple[str, ...]) -> bool:
+    if len(locations) > 1:
+        return any(term in text for location in locations for term in LOCATION_TERMS[location])
+    return any(term in text for term in LOCATION_TERMS[locations[0]])
+
+
+def _matches_sold_listing(listing: ListingSnapshot, text: str) -> bool:
+    if listing.status and "sold" in _normalize(listing.status):
+        return True
+    return any(term in text for term in FEATURE_TERMS["sold"])
 
 
 def _matches_property_type(text: str, property_type: str) -> bool:

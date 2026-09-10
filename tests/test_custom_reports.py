@@ -164,6 +164,80 @@ def test_renovation_needed_request_does_not_match_finished_renovated_listing() -
     assert not listing_matches_request(listing, request)
 
 
+def test_parse_sold_plots_in_sierra_blanca_ignores_time_words() -> None:
+    request = parse_custom_report_request(
+        "Sold plots in Sierra Blanca In the last year",
+        "agent@drumelia.com",
+    )
+
+    assert request.property_type == "plot"
+    assert request.locations == ("sierra_blanca",)
+    assert request.features == ("sold",)
+    assert request.required_terms == ()
+
+
+def test_sold_plot_request_matches_sold_status() -> None:
+    request = parse_custom_report_request(
+        "Sold plots in Sierra Blanca In the last year",
+        "agent@drumelia.com",
+    )
+    listing = ListingSnapshot(
+        site="drumelia",
+        external_id="D2222",
+        url="https://www.example.com/properties/sierra-blanca/plot/D2222",
+        title="Large plot in Sierra Blanca",
+        price=2_800_000,
+        status="Sold",
+    )
+
+    assert listing_matches_request(listing, request)
+
+
+def test_parse_multi_area_villa_price_range() -> None:
+    request = parse_custom_report_request(
+        "Villas for sale in los arqueros, los almendros and puerto del almendro between 3.5M and 5.5M",
+        "agent@drumelia.com",
+    )
+
+    assert request.min_price == 3_500_000
+    assert request.max_price == 5_500_000
+    assert request.property_type == "villa"
+    assert request.locations == ("los_arqueros", "los_almendros", "puerto_del_almendro")
+    assert request.required_terms == ()
+
+
+def test_multi_area_villa_request_matches_any_requested_area() -> None:
+    request = parse_custom_report_request(
+        "Villas for sale in los arqueros, los almendros and puerto del almendro between 3.5M and 5.5M",
+        "agent@drumelia.com",
+    )
+    listing = ListingSnapshot(
+        site="drumelia",
+        external_id="D3333",
+        url="https://www.example.com/properties/los-arqueros/villa/D3333",
+        title="Elegant villa in Los Arqueros",
+        price=4_200_000,
+    )
+
+    assert listing_matches_request(listing, request)
+
+
+def test_multi_area_villa_request_rejects_area_outside_requested_list() -> None:
+    request = parse_custom_report_request(
+        "Villas for sale in los arqueros, los almendros and puerto del almendro between 3.5M and 5.5M",
+        "agent@drumelia.com",
+    )
+    listing = ListingSnapshot(
+        site="drumelia",
+        external_id="D3334",
+        url="https://www.example.com/properties/la-zagaleta/villa/D3334",
+        title="Elegant villa in La Zagaleta",
+        price=4_200_000,
+    )
+
+    assert not listing_matches_request(listing, request)
+
+
 def test_dotted_euro_budget_matches_golden_mile_villa() -> None:
     request = parse_custom_report_request(
         "Villa on the golden mile, budget minimum 5.000.000€",
